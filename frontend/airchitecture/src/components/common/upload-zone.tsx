@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import {
   Box,
   Card,
@@ -10,6 +11,8 @@ import {
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 
 export function UploadZone() {
+  const router = useRouter();
+
   return (
     <Card
       elevation={0}
@@ -25,6 +28,7 @@ export function UploadZone() {
         sx={{
           py: 10,
         }}
+        onClick={() => router.push('/arch-analyse')}
       >
         <Stack
           spacing={3}
