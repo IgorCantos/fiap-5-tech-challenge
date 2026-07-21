@@ -1,0 +1,9 @@
+# Datasets
+/backend/datasets/
+
+# Diretórios de treinamento e temporários
+/backend/app_old/
+/backend/clone/
+/backend/runs/
+/backend/models/
+/backend/preview/

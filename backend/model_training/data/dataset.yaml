@@ -1,0 +1,6 @@
+
+path: C:\Users\igorc\OneDrive\Documentos\FIAP\fiap-5-tech-challenge\backend\model_training\data
+train: icons
+val: icons
+names:
+  0: icon
