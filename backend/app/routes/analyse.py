@@ -1,12 +1,10 @@
-"""Rota 2: analisar uma imagem com o YOLO.
+"""Route 2: analyze images with YOLO11.
 
-Dois endpoints para JSON:
-  - POST /analyse/trained  -> usa o modelo TREINADO (icones AWS).
-  - POST /analyse/base     -> usa o YOLO11 BASE (COCO), sem treino (baseline).
+Two endpoints:
+  - POST /model/yolo11/trained  -> uses TRAINED model (AWS icons).
+  - POST /model/yolo11/base     -> uses YOLO11 BASE (COCO), no training (baseline).
 
-Dois endpoints para imagem com boxes:
-  - POST /analyse/trained/image  -> usa o modelo TREINADO (icones AWS).
-  - POST /analyse/base/image     -> usa o YOLO11 BASE (COCO), sem treino (baseline).
+Both return annotated image with bounding boxes.
 """
 from __future__ import annotations
 
@@ -21,7 +19,7 @@ from app.schemas import DetectResponse
 from app.services import detection
 from app.config import settings
 
-router = APIRouter(tags=["analise"])
+router = APIRouter(tags=["analysis"])
 
 _ALLOWED_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp", "image/bmp"}
 
@@ -68,13 +66,13 @@ async def _analyse_with_image(model, image_bytes: bytes, conf: Optional[float], 
     return StreamingResponse(img_byte_arr, media_type="image/png")
 
 
-@router.post("/analyse/trained")
-async def analyse_trained(
-    file: UploadFile = File(..., description="Imagem do diagrama de arquitetura."),
-    conf: Optional[float] = Query(None, ge=0.0, le=1.0, description="Confianca minima."),
-    iou: Optional[float] = Query(None, ge=0.0, le=1.0, description="IoU do NMS."),
+@router.post("/model/yolo11/trained")
+async def analyse_with_trained_model(
+    file: UploadFile = File(..., description="Architecture diagram image."),
+    conf: Optional[float] = Query(None, ge=0.0, le=1.0, description="Minimum confidence threshold."),
+    iou: Optional[float] = Query(None, ge=0.0, le=1.0, description="IoU threshold for NMS."),
 ):
-    """Identifica os servicos AWS usando o modelo treinado e retorna imagem com boxes."""
+    """Detect AWS services using trained YOLO11 model and return annotated image with bounding boxes."""
     from app.config import settings
     from app.services import detection
     
@@ -88,13 +86,13 @@ async def analyse_trained(
         raise HTTPException(status_code=500, detail=f"Falha na inferencia: {exc}") from exc
 
 
-@router.post("/analyse/base")
-async def analyse_base(
-    file: UploadFile = File(..., description="Imagem para analisar."),
-    conf: Optional[float] = Query(None, ge=0.0, le=1.0, description="Confianca minima."),
-    iou: Optional[float] = Query(None, ge=0.0, le=1.0, description="IoU do NMS."),
+@router.post("/model/yolo11/base")
+async def analyse_with_base_model(
+    file: UploadFile = File(..., description="Image to analyze."),
+    conf: Optional[float] = Query(None, ge=0.0, le=1.0, description="Minimum confidence threshold."),
+    iou: Optional[float] = Query(None, ge=0.0, le=1.0, description="IoU threshold for NMS."),
 ):
-    """Analisa com o YOLO11 base (COCO) e retorna imagem com boxes."""
+    """Analyze with YOLO11 base (COCO) and return annotated image with bounding boxes."""
     from app.config import settings
     from app.services import detection
     
@@ -102,23 +100,5 @@ async def analyse_base(
     try:
         model, _ = detection._load_base_model()
         return await _analyse_with_image(model, image_bytes, conf, iou)
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=f"Falha na inferencia: {exc}") from exc
-
-
-@router.post("/analyse/base/json", response_model=DetectResponse)
-async def analyse_base_json(
-    file: UploadFile = File(..., description="Imagem para analisar."),
-    conf: Optional[float] = Query(None, ge=0.0, le=1.0, description="Confianca minima."),
-    iou: Optional[float] = Query(None, ge=0.0, le=1.0, description="IoU do NMS."),
-) -> DetectResponse:
-    """Analisa com o YOLO11 base (COCO), sem treino. Baseline/comparacao.
-
-    Obs.: o modelo base NAO reconhece icones AWS; ele detecta as classes do
-    COCO (pessoa, carro, etc.).
-    """
-    image_bytes = await _read_image(file)
-    try:
-        return detection.analyse_with_base(image_bytes, conf=conf, iou=iou)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Falha na inferencia: {exc}") from exc

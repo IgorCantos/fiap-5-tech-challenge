@@ -33,10 +33,10 @@ class Settings(BaseSettings):
     best_weights_name: str = "best.pt"
 
     # ----- Geracao do dataset sintetico -----
-    train_images: int = 800          # qtd de imagens sinteticas de treino
-    val_images: int = 160            # qtd de imagens sinteticas de validacao
+    train_images: int = 5000          # qtd de imagens sinteticas de treino
+    val_images: int = 500            # qtd de imagens sinteticas de validacao
     image_size: int = 1024           # lado da imagem sintetica (quadrada)
-    min_icons_per_image: int = 4
+    min_icons_per_image: int = 5
     max_icons_per_image: int = 14
     min_icon_scale: float = 0.045    # fracao do lado da imagem
     max_icon_scale: float = 0.13
@@ -80,11 +80,11 @@ class Settings(BaseSettings):
     icon_recolor_ratio: float = 0.12
 
     # ----- Treino -----
-    epochs: int = 100
+    epochs: int = 1
     batch: int = 16
     train_imgsz: int = 1024
     patience: int = 30
-    device: str = ""                 # "" = auto (cpu/gpu), "cpu", "0", "0,1"...
+    device: str = "cpu"                 # "" = auto (cpu/gpu), "cpu", "0", "0,1"...
 
     # ----- Inferencia -----
     conf_threshold: float = 0.35

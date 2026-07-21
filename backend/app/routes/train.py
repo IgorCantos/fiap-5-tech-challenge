@@ -1,21 +1,18 @@
 """Rota 1: treinar o modelo YOLO11."""
 from __future__ import annotations
 
-from typing import Optional
-
 from fastapi import APIRouter
 
-from app.schemas import TrainRequest, TrainResponse, TrainStatus
+from app.schemas import TrainResponse, TrainStatus
 from app.services import training
+from app.config import settings
 
-router = APIRouter(tags=["treino"])
+router = APIRouter(tags=["training"])
 
 
-@router.post("/train", response_model=TrainResponse)
-def train(request: Optional[TrainRequest] = None) -> TrainResponse:
-    """Dispara o treino em background (gera dataset sintetico e treina)."""
-    request = request or TrainRequest()
-
+@router.post("/model/yolo11/train/start", response_model=TrainResponse)
+def start_training() -> TrainResponse:
+    """Start YOLO11 model training in background (uses config.py values)."""
     if training.get_status().state in {"preparing_dataset", "training"}:
         return TrainResponse(
             accepted=False,
@@ -23,15 +20,24 @@ def train(request: Optional[TrainRequest] = None) -> TrainResponse:
             status=training.get_status(),
         )
 
-    status = training.start_training(request.model_dump(exclude_none=True))
+    params = {
+        "epochs": settings.epochs,
+        "batch": settings.batch,
+        "imgsz": settings.train_imgsz,
+        "train_images": settings.train_images,
+        "val_images": settings.val_images,
+        "regenerate_dataset": True,
+        "device": settings.device,
+    }
+    status = training.start_training(params)
     return TrainResponse(
         accepted=True,
-        message="Treino iniciado em background. Consulte GET /train/status.",
+        message="Treino iniciado em background. Consulte GET /model/yolo11/train/status.",
         status=status,
     )
 
 
-@router.get("/train/status", response_model=TrainStatus)
-def train_status() -> TrainStatus:
-    """Consulta o status do treino atual/anterior."""
+@router.get("/model/yolo11/train/status", response_model=TrainStatus)
+def get_training_status() -> TrainStatus:
+    """Get YOLO11 training status."""
     return training.get_status()

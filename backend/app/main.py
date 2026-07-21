@@ -15,6 +15,7 @@ from fastapi import FastAPI
 
 from app.config import settings
 from app.routes import analyse as analyse_route
+from app.routes import preview as preview_route
 from app.routes import train as train_route
 from app.services import detection
 
@@ -26,6 +27,7 @@ app = FastAPI(
 
 app.include_router(train_route.router)
 app.include_router(analyse_route.router)
+app.include_router(preview_route.router)
 
 
 @app.get("/health", tags=["infra"])
