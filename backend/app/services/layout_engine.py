@@ -568,7 +568,7 @@ def _assign_sizes(region: Rect, count: int, rng: random.Random, size: int) -> Li
     cols = max(1, int(round(count ** 0.5)))
     rows = max(1, (count + cols - 1) // cols)
     cell = min(w / cols, h / rows)
-    cap = max(24, cell * 0.82)
+    cap = max(24, cell * 0.92)
     sizes = []
     for _ in range(count):
         px = sample_scale_frac(rng) * size
@@ -595,7 +595,7 @@ def build_isolated(class_names: List[str], size: int, rng: random.Random,
                        complexity="isolated")
     min_icons = max(1, settings.min_icons_per_image)
     n = rng.randint(min_icons, min_icons + 2)
-    margin = size * 0.18
+    margin = size * 0.10
     region = (margin, margin, size - margin, size - margin)
     layout = rng.choice(["pipeline_h", "pipeline_v", "grid"])
     pts = LAYOUT_FUNCS[layout](n, region, rng)
@@ -625,7 +625,7 @@ def build_diagram(class_names: List[str], size: int, rng: random.Random,
     spec = DiagramSpec(size=size, background=rng.choice(BACKGROUND_STYLES),
                        complexity=complexity)
 
-    margin = size * rng.uniform(0.04, 0.09)
+    margin = size * rng.uniform(0.03, 0.06)
     region = (margin, margin, size - margin, size - margin)
     boxes, regions = _build_containers(region, complexity, rng)
     spec.boxes.extend(boxes)

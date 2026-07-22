@@ -11,7 +11,15 @@ Auxiliares:
 """
 from __future__ import annotations
 
+import logging
+
 from fastapi import FastAPI
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
 
 from app.config import settings
 from app.routes import analyse as analyse_route

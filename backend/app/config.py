@@ -33,13 +33,13 @@ class Settings(BaseSettings):
     best_weights_name: str = "best.pt"
 
     # ----- Geracao do dataset sintetico -----
-    train_images: int = 5000          # qtd de imagens sinteticas de treino
-    val_images: int = 500            # qtd de imagens sinteticas de validacao
-    image_size: int = 1024           # lado da imagem sintetica (quadrada)
-    min_icons_per_image: int = 5
+    train_images: int = 2500          # qtd de imagens sinteticas de treino
+    val_images: int = 160            # qtd de imagens sinteticas de validacao
+    image_size: int = 768            # lado da imagem sintetica (quadrada)
+    min_icons_per_image: int = 4
     max_icons_per_image: int = 14
-    min_icon_scale: float = 0.045    # fracao do lado da imagem
-    max_icon_scale: float = 0.13
+    min_icon_scale: float = 0.07     # fracao do lado da imagem (icones maiores)
+    max_icon_scale: float = 0.20
     max_placement_iou: float = 0.35  # sobreposicao maxima permitida entre icones
     # Seed configuravel. None => gera uma seed aleatoria a cada execucao, de modo
     # que duas geracoes consecutivas produzam datasets diferentes.
@@ -66,23 +66,17 @@ class Settings(BaseSettings):
     # Variedade de renderizacao dos icones (aumenta a diversidade do dataset):
     #  - "original": mantem a imagem original, com seu fundo/box (icone opaco)
     #  - "card": icone (fundo removido) sobre um card branco arredondado (tile AWS)
-    #  - "black": silhueta totalmente preta do icone (apos remover o fundo)
-    #  - "white_on_black": icone em branco sobre um card preto (apos remover o fundo)
-    #  - "white": silhueta branca com fino contorno escuro, sem fundo (visivel em qualquer fundo)
-    #  - "recolor": muda a cor do icone (hue shift preservando detalhe, ou silhueta colorida)
-    #  - restante: fundo removido/transparente (comportamento atual)
-    # Evita que icones claros (linha fina) fiquem invisiveis sobre fundo claro.
-    icon_original_ratio: float = 0.22
-    icon_card_ratio: float = 0.15
-    icon_black_ratio: float = 0.10
-    icon_white_on_black_ratio: float = 0.10
-    icon_white_ratio: float = 0.08
-    icon_recolor_ratio: float = 0.12
+    #  - restante: fundo removido/transparente
+    # Icones AWS sao tiles coloridos full-bleed (EC2 laranja, RDS azul, ...) e os
+    # diagramas reais usam justamente esses tiles, entao preservamos a cor de
+    # marca (sem silhuetas/recolor, que descaracterizariam os icones cheios).
+    icon_original_ratio: float = 0.60 
+    icon_card_ratio: float = 0.20
 
-    # ----- Treino -----
-    epochs: int = 1
+    # ----- Treino -----  
+    epochs: int = 50
     batch: int = 16
-    train_imgsz: int = 1024
+    train_imgsz: int = 768
     patience: int = 30
     device: str = "cpu"                 # "" = auto (cpu/gpu), "cpu", "0", "0,1"...
 

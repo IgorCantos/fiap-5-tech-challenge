@@ -7,6 +7,7 @@ Fluxo: gera dataset sintetico -> treina YOLO11 -> copia melhor peso para
 """
 from __future__ import annotations
 
+import logging
 import shutil
 import threading
 from datetime import datetime, timezone
@@ -15,6 +16,8 @@ from typing import Optional
 from app.config import settings
 from app.schemas import TrainStatus
 from app.services import dataset as dataset_service
+
+logger = logging.getLogger(__name__)
 
 
 class _TrainingState:
@@ -50,7 +53,21 @@ def _now() -> str:
 
 
 def _run_training(params: dict) -> None:
+    logger.info("[TRAINING] Iniciando processo de treino...")
     try:
+        # Limpa dados de treinamentos anteriores
+        logger.info("[TRAINING] Limpando dados de treinamentos anteriores...")
+        if settings.datasets_dir.exists():
+            shutil.rmtree(settings.datasets_dir)
+            logger.info(f"[TRAINING] Dataset antigo removido: {settings.datasets_dir}")
+        if settings.runs_dir.exists():
+            shutil.rmtree(settings.runs_dir)
+            logger.info(f"[TRAINING] Runs antigos removidos: {settings.runs_dir}")
+        if settings.best_weights_path.exists():
+            settings.best_weights_path.unlink()
+            logger.info(f"[TRAINING] Modelo antigo removido: {settings.best_weights_path}")
+
+        logger.info("[TRAINING] Gerando dataset sintetico a partir dos icones...")
         state.update(
             state="preparing_dataset",
             message="Gerando dataset sintetico a partir dos icones...",
@@ -62,18 +79,23 @@ def _run_training(params: dict) -> None:
 
         if params.get("regenerate_dataset", True) or not settings.data_yaml_path.exists():
             def _progress(split, done, total):
-                state.update(message=f"Gerando dataset ({split}): {done}/{total} imagens")
+                msg = f"Gerando dataset ({split}): {done}/{total} imagens"
+                logger.info(f"[TRAINING] {msg}")
+                state.update(message=msg)
 
             data_yaml, class_names = dataset_service.generate_dataset(
                 train_images=params.get("train_images"),
                 val_images=params.get("val_images"),
                 on_progress=_progress,
             )
+            logger.info(f"[TRAINING] Dataset gerado com sucesso. Classes: {class_names}")
         else:
             import yaml
             data_yaml = settings.data_yaml_path
             class_names = yaml.safe_load(data_yaml.read_text(encoding="utf-8")).get("names", [])
+            logger.info(f"[TRAINING] Dataset existente encontrado. Classes: {class_names}")
 
+        logger.info("[TRAINING] Iniciando treinamento do YOLO11...")
         state.update(
             state="training",
             message="Treinando YOLO11...",
@@ -90,6 +112,7 @@ def _run_training(params: dict) -> None:
         if device is None:
             device = settings.device
 
+        logger.info(f"[TRAINING] Configuracao: epochs={epochs}, batch={batch}, imgsz={imgsz}, device={device or 'auto'}")
         model = YOLO(settings.base_weights)
         results = model.train(
             data=str(data_yaml),
@@ -105,6 +128,7 @@ def _run_training(params: dict) -> None:
         )
 
         # Localiza e copia o melhor peso.
+        logger.info("[TRAINING] Treino concluido. Localizando melhor peso...")
         best = getattr(getattr(results, "save_dir", None), "__str__", lambda: "")()
         run_dir = settings.runs_dir / "aws_icons"
         best_src = run_dir / "weights" / "best.pt"
@@ -121,12 +145,14 @@ def _run_training(params: dict) -> None:
         try:
             if getattr(results, "results_dict", None):
                 metrics = {k: float(v) for k, v in results.results_dict.items()}
+                logger.info(f"[TRAINING] Métricas finais: {metrics}")
         except Exception:  # noqa: BLE001
             metrics = None
 
         if best_src and best_src.exists():
             settings.models_dir.mkdir(parents=True, exist_ok=True)
             shutil.copy2(best_src, settings.best_weights_path)
+            logger.info(f"[TRAINING] Modelo salvo em: {settings.best_weights_path}")
             state.update(
                 state="completed",
                 message="Treino concluido. Modelo salvo em models/best.pt.",
@@ -136,6 +162,7 @@ def _run_training(params: dict) -> None:
                 metrics=metrics,
             )
         else:
+            logger.error("[TRAINING] ERRO: Peso 'best.pt' nao encontrado")
             state.update(
                 state="failed",
                 message="Treino finalizou mas o peso 'best.pt' nao foi encontrado.",
@@ -144,6 +171,7 @@ def _run_training(params: dict) -> None:
             )
 
     except Exception as exc:  # noqa: BLE001
+        logger.error(f"[TRAINING] ERRO durante o treino: {type(exc).__name__}: {exc}")
         state.update(
             state="failed",
             message="Falha durante o treino.",

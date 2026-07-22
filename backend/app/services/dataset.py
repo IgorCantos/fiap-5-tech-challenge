@@ -33,7 +33,7 @@ from app.config import settings
 from app.services import layout_engine as le
 from app.services.layout_engine import DiagramSpec
 
-SUPPORTED_EXT = {".png", ".webp", ".jpg", ".jpeg", ".bmp", ".gif", ".svg"}
+SUPPORTED_EXT = {".png", ".webp", ".jpg", ".jpeg", ".bmp", ".gif"}
 
 
 @dataclass
@@ -114,6 +114,12 @@ def _remove_solid_background(img: Image.Image, tolerance: int) -> Image.Image:
     ).astype(np.float32)
     bg = np.median(border, axis=0)
 
+    # Se o "fundo" for uma cor SATURADA (ex.: o tile laranja do EC2 / azul do
+    # RDS), ele NAO e um fundo: e o proprio icone full-bleed. Remove-lo apagaria
+    # a cor de marca do icone. Nesse caso, preserva a imagem original.
+    if float(bg.max() - bg.min()) > 35.0:
+        return img.convert("RGBA")
+
     # Se a borda nao for uniforme, provavelmente nao ha fundo solido a remover.
     if float(np.sqrt(((border - bg) ** 2).sum(axis=1)).mean()) > 45.0:
         return img.convert("RGBA")
@@ -134,45 +140,6 @@ def _remove_solid_background(img: Image.Image, tolerance: int) -> Image.Image:
     alpha = np.where(marked, 0, 255).astype(np.uint8)
     rgba = np.dstack([arr, alpha])
     return Image.fromarray(rgba, "RGBA")
-
-
-def _is_svg(path: Path) -> bool:
-    """Detecta SVG por conteudo (a extensao pode estar errada, ex.: .jpg)."""
-    if path.suffix.lower() == ".svg":
-        return True
-    try:
-        with open(path, "rb") as fh:
-            head = fh.read(1024).lstrip().lower()
-        return b"<svg" in head
-    except OSError:
-        return False
-
-
-def _rasterize_svg(path: Path) -> Image.Image:
-    """Rasteriza um SVG para RGB (fundo branco) usando svglib + reportlab."""
-    try:
-        from reportlab.graphics import renderPM
-        from svglib.svglib import svg2rlg
-    except ImportError as exc:  # noqa: BLE001
-        raise RuntimeError(
-            "Icone SVG encontrado, mas 'svglib' nao esta instalado. "
-            "Rode: pip install svglib"
-        ) from exc
-
-    drawing = svg2rlg(str(path))
-    if drawing is None:
-        raise ValueError(f"Nao foi possivel interpretar o SVG: {path}")
-
-    # Escala para uma resolucao boa (icones pequenos ficam nitidos ao compor).
-    target = 384.0
-    longest = max(drawing.width or target, drawing.height or target)
-    scale = max(1.0, target / longest)
-    drawing.scale(scale, scale)
-    drawing.width = (drawing.width or target) * scale
-    drawing.height = (drawing.height or target) * scale
-
-    pil = renderPM.drawToPIL(drawing, dpi=72, bg=0xFFFFFF)
-    return pil.convert("RGB")
 
 
 def _to_hires(img: Image.Image, crop: bool) -> Image.Image:
@@ -207,19 +174,14 @@ def _load_icon_variants(path: Path) -> Dict[str, Image.Image]:
     / card branco (ver `_finalize_icon`), garantindo variedade e evitando que
     icones claros de linha fina fiquem invisiveis sobre fundos claros.
 
-    Suporta PNG/JPEG/WebP/BMP/GIF (detectando pelo conteudo) e SVG (svglib).
+    Suporta PNG/JPEG/WebP/BMP/GIF (detectando pelo conteudo).
     """
-    if _is_svg(path):
-        raw_rgb = _rasterize_svg(path)  # RGB com fundo branco
-        original = raw_rgb.convert("RGBA")
-        transparent = _remove_solid_background(raw_rgb, settings.icon_bg_tolerance)
+    raw = Image.open(path)
+    original = raw.convert("RGBA")
+    if settings.remove_icon_background and not _has_transparency(raw):
+        transparent = _remove_solid_background(raw, settings.icon_bg_tolerance)
     else:
-        raw = Image.open(path)
-        original = raw.convert("RGBA")
-        if settings.remove_icon_background and not _has_transparency(raw):
-            transparent = _remove_solid_background(raw, settings.icon_bg_tolerance)
-        else:
-            transparent = raw.convert("RGBA")
+        transparent = raw.convert("RGBA")
 
     return {
         "transparent": _to_hires(transparent, crop=True),
@@ -243,65 +205,6 @@ def _make_card(icon_transp: Image.Image, rng: random.Random) -> Image.Image:
     return card
 
 
-def _silhouette(icon_transp: Image.Image, color: Tuple[int, int, int]) -> Image.Image:
-    """Recolore o icone (mantendo o formato/alpha) com uma cor solida."""
-    alpha = icon_transp.split()[-1]
-    out = Image.new("RGBA", icon_transp.size, color + (0,))
-    out.putalpha(alpha)
-    return out
-
-
-def _make_black_on_white_removed(icon_transp: Image.Image) -> Image.Image:
-    """Silhueta totalmente PRETA do icone (fundo transparente)."""
-    return _silhouette(icon_transp, (0, 0, 0))
-
-
-def _make_white_on_black(icon_transp: Image.Image, rng: random.Random) -> Image.Image:
-    """Icone em BRANCO sobre um card PRETO arredondado (apos remover o fundo)."""
-    w, h = icon_transp.size
-    card = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(card)
-    pad = int(min(w, h) * rng.uniform(0.03, 0.08))
-    radius = int(min(w, h) * rng.uniform(0.08, 0.16))
-    draw.rounded_rectangle(
-        [pad, pad, w - pad, h - pad], radius=radius, fill=(0, 0, 0, 255),
-    )
-    card.alpha_composite(_silhouette(icon_transp, (255, 255, 255)))
-    return card
-
-
-def _make_white_outline(icon_transp: Image.Image, rng: random.Random) -> Image.Image:
-    """Silhueta BRANCA com fino contorno escuro, sem fundo.
-
-    O contorno (silhueta dilatada, escura) garante que o icone branco seja
-    visivel sobre qualquer fundo (claro ou escuro).
-    """
-    alpha = icon_transp.split()[-1]
-    k = rng.choice([3, 5])
-    dilated = alpha.filter(ImageFilter.MaxFilter(k))
-    outline = Image.new("RGBA", icon_transp.size, (35, 35, 40, 0))
-    outline.putalpha(dilated)
-    outline.alpha_composite(_silhouette(icon_transp, (255, 255, 255)))
-    return outline
-
-
-def _make_recolor(icon_transp: Image.Image, rng: random.Random) -> Image.Image:
-    """Muda a cor do icone: hue shift (preserva detalhe) ou silhueta colorida."""
-    if rng.random() < 0.55:
-        # rotacao de matiz preservando forma/detalhe interno
-        r, g, b, a = icon_transp.split()
-        hsv = Image.merge("RGB", (r, g, b)).convert("HSV")
-        h, s, v = hsv.split()
-        shift = rng.randint(20, 235)
-        h = h.point(lambda p: (p + shift) % 256)
-        rgb2 = Image.merge("HSV", (h, s, v)).convert("RGB")
-        r2, g2, b2 = rgb2.split()
-        return Image.merge("RGBA", (r2, g2, b2, a))
-    # silhueta de cor solida (escura o suficiente p/ visibilidade em fundo claro)
-    color = tuple(rng.randint(20, 150) for _ in range(3))
-    return _silhouette(icon_transp, color)
-
-
 def _pick_variant(rng: random.Random) -> str:
     r = rng.random()
     acc = settings.icon_original_ratio
@@ -310,18 +213,6 @@ def _pick_variant(rng: random.Random) -> str:
     acc += settings.icon_card_ratio
     if r < acc:
         return "card"
-    acc += settings.icon_black_ratio
-    if r < acc:
-        return "black"
-    acc += settings.icon_white_on_black_ratio
-    if r < acc:
-        return "white_on_black"
-    acc += settings.icon_white_ratio
-    if r < acc:
-        return "white"
-    acc += settings.icon_recolor_ratio
-    if r < acc:
-        return "recolor"
     return "transparent"
 
 
@@ -547,21 +438,13 @@ def _augment_hires(icon: Image.Image, rng: random.Random) -> Image.Image:
 
 def _finalize_icon(variants: Dict[str, Image.Image], target: int,
                    rng: random.Random) -> Image.Image:
-    """Sorteia a variante (transparent/original/card/black/white_on_black/
-    white/recolor), augmenta em alta-res e reduz para o tamanho final."""
+    """Sorteia a variante (original/card/transparent), augmenta em alta-res e
+    reduz para o tamanho final (maior lado == target)."""
     variant = _pick_variant(rng)
     if variant == "original":
         base = variants["original"]
     elif variant == "card":
         base = _make_card(variants["transparent"], rng)
-    elif variant == "black":
-        base = _make_black_on_white_removed(variants["transparent"])
-    elif variant == "white_on_black":
-        base = _make_white_on_black(variants["transparent"], rng)
-    elif variant == "white":
-        base = _make_white_outline(variants["transparent"], rng)
-    elif variant == "recolor":
-        base = _make_recolor(variants["transparent"], rng)
     else:
         base = variants["transparent"]
 
