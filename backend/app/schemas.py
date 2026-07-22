@@ -7,20 +7,11 @@ from pydantic import BaseModel, Field
 
 
 class TrainRequest(BaseModel):
-    """Parametros opcionais para disparar um treino."""
+    """Parametros para disparar um treino."""
 
-    epochs: Optional[int] = Field(default=None, ge=1, le=2000)
-    batch: Optional[int] = Field(default=None, ge=1, le=256)
-    imgsz: Optional[int] = Field(default=None, ge=320, le=2048)
-    train_images: Optional[int] = Field(default=None, ge=20)
-    val_images: Optional[int] = Field(default=None, ge=5)
-    regenerate_dataset: bool = Field(
-        default=True,
-        description="Se True, regenera o dataset sintetico antes de treinar.",
-    )
-    device: Optional[str] = Field(
-        default=None,
-        description="'' (auto), 'cpu', '0', '0,1' ...",
+    use_old_trained_model: bool = Field(
+        default=False,
+        description="Se True, treina em cima do modelo atual (best.pt) em vez do modelo base.",
     )
 
 

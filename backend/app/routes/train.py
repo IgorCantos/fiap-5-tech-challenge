@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.schemas import TrainResponse, TrainStatus
+from app.schemas import TrainRequest, TrainResponse, TrainStatus
 from app.services import training
 from app.config import settings
 
@@ -11,7 +11,7 @@ router = APIRouter(tags=["training"])
 
 
 @router.post("/model/yolo11/train/start", response_model=TrainResponse)
-def start_training() -> TrainResponse:
+def start_training(request: TrainRequest = None) -> TrainResponse:
     """Start YOLO11 model training in background (uses config.py values)."""
     if training.get_status().state in {"preparing_dataset", "training"}:
         return TrainResponse(
@@ -28,6 +28,7 @@ def start_training() -> TrainResponse:
         "val_images": settings.val_images,
         "regenerate_dataset": True,
         "device": settings.device,
+        "use_old_trained_model": request.use_old_trained_model if request else False,
     }
     status = training.start_training(params)
     return TrainResponse(

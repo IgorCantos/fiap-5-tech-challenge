@@ -55,6 +55,8 @@ def _now() -> str:
 def _run_training(params: dict) -> None:
     logger.info("[TRAINING] Iniciando processo de treino...")
     try:
+        use_old_model = params.get("use_old_trained_model", False)
+        
         # Limpa dados de treinamentos anteriores
         logger.info("[TRAINING] Limpando dados de treinamentos anteriores...")
         if settings.datasets_dir.exists():
@@ -63,9 +65,19 @@ def _run_training(params: dict) -> None:
         if settings.runs_dir.exists():
             shutil.rmtree(settings.runs_dir)
             logger.info(f"[TRAINING] Runs antigos removidos: {settings.runs_dir}")
+        
+        # Versionamento de modelos: se usar modelo antigo, faz backup antes de deletar
         if settings.best_weights_path.exists():
+            if use_old_model:
+                # Versiona o modelo antigo
+                from datetime import datetime
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                versioned_name = f"best_{timestamp}.pt"
+                versioned_path = settings.models_dir / versioned_name
+                shutil.copy2(settings.best_weights_path, versioned_path)
+                logger.info(f"[TRAINING] Modelo antigo versionado: {versioned_path}")
             settings.best_weights_path.unlink()
-            logger.info(f"[TRAINING] Modelo antigo removido: {settings.best_weights_path}")
+            logger.info(f"[TRAINING] Modelo best.pt removido para novo treinamento")
 
         logger.info("[TRAINING] Gerando dataset sintetico a partir dos icones...")
         state.update(
@@ -113,7 +125,26 @@ def _run_training(params: dict) -> None:
             device = settings.device
 
         logger.info(f"[TRAINING] Configuracao: epochs={epochs}, batch={batch}, imgsz={imgsz}, device={device or 'auto'}")
-        model = YOLO(settings.base_weights)
+        
+        # Seleciona o modelo base: modelo versionado mais recente ou modelo base
+        if use_old_model:
+            # Busca o modelo versionado mais recente
+            versioned_models = sorted(
+                settings.models_dir.glob("best_*.pt"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            if versioned_models:
+                base_model = str(versioned_models[0])
+                logger.info(f"[TRAINING] Usando modelo versionado como base: {base_model}")
+            else:
+                base_model = settings.base_weights
+                logger.info(f"[TRAINING] Nenhum modelo versionado encontrado, usando modelo base: {base_model}")
+        else:
+            base_model = settings.base_weights
+            logger.info(f"[TRAINING] Usando modelo base: {base_model}")
+        
+        model = YOLO(base_model)
         results = model.train(
             data=str(data_yaml),
             epochs=epochs,
