@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     best_weights_name: str = "best.pt"
 
     # ----- Geracao do dataset sintetico -----
-    train_images: int = 1500          # qtd de imagens sinteticas de treino
+    train_images: int = 900          # qtd de imagens sinteticas de treino
     val_images: int = 160            # qtd de imagens sinteticas de validacao
     image_size: int = 768            # lado da imagem sintetica (quadrada)
     min_icons_per_image: int = 4
@@ -74,7 +74,7 @@ class Settings(BaseSettings):
     icon_card_ratio: float = 0.20
 
     # ----- Treino -----  
-    epochs: int = 15
+    epochs: int = 25
     batch: int = 16
     train_imgsz: int = 768
     patience: int = 30
